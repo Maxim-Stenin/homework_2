@@ -1,0 +1,28 @@
+# Секреты — ни при каких обстоятельствах не в репозиторий
+.env
+.env.*
+*.key
+*.pem
+secrets/
+**/credentials*
+
+# Локальные настройки инструментов (личные разрешения, не общие правила проекта)
+.claude/settings.local.json
+
+# Временные файлы
+*.tmp
+*.log
+*.streams.txt
+scratch/
+tmp/
+
+# ОС
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Зависимости и сборка — уточняется в сессии 2, когда появится стек объекта
+node_modules/
+dist/
+build/
+__pycache__/

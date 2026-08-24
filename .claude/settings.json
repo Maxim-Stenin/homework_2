@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "deny": [
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean*)",
+      "Bash(git filter-branch*)",
+      "Bash(git branch -D*)",
+      "Bash(git tag -d*)",
+      "Bash(rm -rf*)",
+      "Bash(rm -fr*)",
+      "PowerShell(git push --force*)",
+      "PowerShell(git push -f*)",
+      "PowerShell(git reset --hard*)",
+      "PowerShell(git clean*)",
+      "PowerShell(git filter-branch*)",
+      "PowerShell(git branch -D*)",
+      "PowerShell(git tag -d*)",
+      "PowerShell(Remove-Item -Recurse*)",
+      "PowerShell(rm -r*)",
+      "Edit(../task/**)",
+      "Write(../task/**)",
+      "NotebookEdit(../task/**)",
+      "Edit(../homework_1/**)",
+      "Write(../homework_1/**)",
+      "NotebookEdit(../homework_1/**)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(git commit*)",
+      "PowerShell(git push*)",
+      "PowerShell(git commit*)",
+      "Bash(npm install*)",
+      "Bash(npx*)",
+      "Bash(pip install*)",
+      "Bash(py -m pip install*)",
+      "PowerShell(winget install*)"
+    ]
+  }
+}
