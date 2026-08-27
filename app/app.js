@@ -209,11 +209,28 @@ function showError(message) {
   document.getElementById('formError').textContent = message;
 }
 
+/* ---------- шов фильтрации ---------- */
+
+/* ЕДИНСТВЕННАЯ точка, через которую отрисовка и выгрузка берут список записей.
+   Заведена ДО фильтрации, чтобы ветка feature/filters меняла одну функцию,
+   а не четыре места в трёх чужих зонах.
+
+   purpose — зачем список спрашивают. Значения: 'table' (таблица),
+   'stats' (итоги и диаграмма), 'export' (выгрузка CSV). Разделены потому, что
+   по SPEC они РАСХОДЯТСЯ: при устаревшем результате фильтрации посторонняя
+   запись видна в таблице, но в итоги и диаграмму не входит.
+
+   Сейчас все три отдают полный список — поведение то же, что было.
+   Владелец функции — feature/filters. Другие ветки её не трогают. */
+function listFor(purpose) {
+  return transactions;
+}
+
 /* ---------- отрисовка ---------- */
 
 function renderTotals() {
   var income = 0, expense = 0;
-  transactions.forEach(function (t) {
+  listFor('stats').forEach(function (t) {
     if (t.type === 'income') income += t.amount; else expense += t.amount;
   });
   var balance = income - expense;
@@ -226,7 +243,7 @@ function renderTotals() {
 
 function groupByCategory(type) {
   var map = {}, order = [];
-  transactions.forEach(function (t) {
+  listFor('stats').forEach(function (t) {
     if (t.type !== type) return;
     var key = categoryKey(t.category);
     if (!map[key]) { map[key] = { name: t.category, sum: 0 }; order.push(key); }
@@ -325,15 +342,19 @@ function fitLabelInsideHole(label, radius, stroke) {
 function renderTable() {
   var tbody = document.getElementById('tbody');
   var empty = document.getElementById('tableEmpty');
+  var rows = listFor('table');
   tbody.innerHTML = '';
 
-  if (transactions.length === 0) {
+  /* ЗОНА filters — пустое состояние. По SPEC «записей пока нет» и «под фильтр
+     ничего не подошло» это РАЗНЫЕ состояния с разным текстом (Сц-4).
+     Развести их — задача feature/filters; больше сюда никто не пишет. */
+  if (rows.length === 0) {
     empty.hidden = false;
     return;
   }
   empty.hidden = true;
 
-  var sorted = transactions.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  var sorted = rows.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
 
   sorted.forEach(function (t) {
     var tr = document.createElement('tr');
@@ -446,7 +467,8 @@ function setChartMode(mode) {
 }
 
 document.getElementById('btnSave').addEventListener('click', function () {
-  var blob = new Blob(['﻿' + toCSV(transactions)], { type: 'text/csv;charset=utf-8' });
+  // При активном фильтре выгружается отфильтрованный список — решение человека, SPEC Сц-9.
+  var blob = new Blob(['﻿' + toCSV(listFor('export'))], { type: 'text/csv;charset=utf-8' });
   var url = URL.createObjectURL(blob);
   var link = document.createElement('a');
   link.href = url;
@@ -502,3 +524,33 @@ document.getElementById('fDate').value = todayISO();
 document.getElementById('fDate').max = todayISO();   // BUG-005: будущее недоступно и в календаре
 load();
 renderAll();
+
+/* ============================================================================
+   ЗОНЫ ПАРАЛЛЕЛЬНОЙ РАБОТЫ. Всё, что ВЫШЕ этой черты, — общий код: он правится
+   только в перечисленных ниже точках и только названным владельцем. Ниже —
+   по блоку на ветку; каждая пишет только в свой блок.
+
+   Точечные исключения выше черты, согласованные заранее:
+     feature/filters  — тело listFor(), пустое состояние в renderTable(),
+                        гашение вкладки в setChartMode(), сброс фильтра
+                        при загрузке CSV;
+     feature/storage  — тело save();
+     feature/design   — константа COLORS (палитра диаграммы), и только она;
+     feature/theme    — ничего выше черты; тема живёт в своём блоке и в CSS.
+   ============================================================================ */
+
+/* ===== ЗОНА filters. Владелец — feature/filters.
+   Состояние фильтра, чтение панели, счётчик, плашка «устарел». ===== */
+
+/* ===== /ЗОНА filters ===== */
+
+/* ===== ЗОНА theme. Владелец — feature/theme.
+   Три состояния переключателя, отдельный ключ localStorage (НЕ finance.csv),
+   подписка на смену системной темы. ===== */
+
+/* ===== /ЗОНА theme ===== */
+
+/* ===== ЗОНА storage. Владелец — feature/storage.
+   Показ и скрытие сообщения о том, что запись не сохранена. ===== */
+
+/* ===== /ЗОНА storage ===== */
