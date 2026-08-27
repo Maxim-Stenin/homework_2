@@ -94,3 +94,58 @@
 - **Проверка:** файл на месте, 8260 байт, фронтматтер `name: frontend-design` читается.
   **В деле не проверен** — на момент записи по нему ещё ничего не сверстано.
   Источник, ревизия `423563c` и расхождения с правилами проекта — в `.claude/skills/SOURCE.md`
+
+## 2026-08-27 · Сессия 3 · GitNexus 1.6.9 — плагин Claude Code
+
+- **Тип:** плагин ассистента (скиллы + хуки)
+- **Установка:**
+  `claude plugin marketplace add abhigyanpatwari/GitNexus`
+  `claude plugin install gitnexus@gitnexus-marketplace`
+  Scope — **user**, то есть глобально на машину. Вариант выбран человеком
+  из трёх предложенных; отклонены «CLI + MCP только в проект» и «сначала
+  проверить в песочнице».
+- **Зачем:** необязательный пункт задания «оптимизатор контекста». Строит граф
+  кодовой базы, отдаёт агенту срез вместо сплошного чтения файлов. Выбран после
+  сравнения с Graphify — см. разбор в `sessions/session-3.md`
+- **Область:** система (`~/.claude`), не проект. Хуки `PreToolUse`/`PostToolUse`
+  действуют **во всех проектах человека**, а не только в этом
+- **Проверка:** проверено по файлам, а не по слову «Successfully»:
+  `~/.claude/settings.json` → `extraKnownMarketplaces.gitnexus-marketplace`
+  и `enabledPlugins["gitnexus@gitnexus-marketplace"] = true`;
+  хуки на диске — `~/.claude/plugins/cache/gitnexus-marketplace/gitnexus/1.6.9/hooks/hooks.json`.
+  **В деле не проверен:** ни один из 12 скиллов не вызывался, граф не строился
+- **Разбор перед установкой (сделан до, а не после):** невидимых символов нет,
+  флагов `--dangerously-skip-permissions`, `bypassPermissions`, `--yolo`,
+  `autoApprove` нет нигде. Хук `gitnexus-hook.js` (572 строки) **в сеть не ходит** —
+  только `spawnSync` для локальных `git` и `gitnexus`; текст, который он вставляет
+  в контекст агента, информационный («индекс устарел», «локальный доступ занят»),
+  без директив и без `permissionDecision: deny`
+- **Что осталось непроверенным:** манифест плагина объявляет владельцем
+  `nico@gitnexus.dev` и homepage `github.com/nicosxt/gitnexus`, а установка идёт
+  из `abhigyanpatwari/GitNexus` — несовпадение в цепочке поставок не выяснено.
+  Лицензия распознана GitHub как `NOASSERTION`
+
+## 2026-08-27 · Сессия 3 · GitNexus CLI 1.6.9
+
+- **Тип:** CLI
+- **Установка:** `GITNEXUS_SKIP_OPTIONAL_GRAMMARS=1 DO_NOT_TRACK=1 npm install -g gitnexus`
+  Флаг пропуска грамматик — потому что без него npm собирает нативные модули
+  для Dart, Proto, Swift и Kotlin, а `python3`/`make`/`g++` на машине нет.
+  Эти четыре языка парситься не будут; нам они не нужны
+- **Зачем:** без CLI плагин — декорация: его хук ищет `gitnexus` через `which`
+  и без него молча ничего не делает
+- **Область:** система
+- **Проверка:** `gitnexus --version` → `1.6.9`, путь
+  `/c/Users/msten/AppData/Roaming/npm/gitnexus`. Функциональный замер на копиях
+  в scratchpad: `index.html` (766 строк) → 1 узел, 0 связей; тот же JS в `app.js`
+  (506 строк) → 63 узла, 154 связи, 5 кластеров, 13 потоков.
+  **Вывод: на проекте до разделения на три файла инструмент бесполезен**
+- **Найдено при установке:** npm 11 заблокировал все install-скрипты, включая
+  `@scarf/scarf` 1.4.0 («Google Analytics для npm-пакетов», шлёт на `scarf.sh`
+  платформу, архитектуру, версию Node и состав зависимостей) и `onnxruntime-node`
+  (тянет бинарники с `api.nuget.org`). Ни один postinstall не выполнился
+- **Опасное поведение, найденное запуском:** `gitnexus analyze` без флагов
+  **дописывает `AGENTS.md`, `CLAUDE.md` и шесть скиллов в `.claude/skills/`**
+  анализируемого репозитория, с директивами `MUST` / `NEVER`. В `result/`
+  запускать **только** `gitnexus analyze --index-only` — флаг описан самим
+  вендором как «skip all file injection (AGENTS.md, CLAUDE.md, skills)»
