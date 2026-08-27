@@ -152,4 +152,23 @@ td.amount.expense { color: var(--expense); }
 /* ===== ЗОНА storage — стили сообщения о несохранённой записи.
    Владелец — feature/storage. ===== */
 
+/* Сообщение о том, что запись не легла в localStorage (SPEC, п. 4, Сц-15).
+   Отдельный элемент, а не #formError: сообщения валидации формы и сообщение
+   хранилища не должны затирать друг друга. */
+.storage-alert {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--expense);
+  border-left-width: 4px;
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--expense);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+/* Элемент скрывается атрибутом hidden. Правило нужно на случай, если
+   отображение блока где-то задано явно и перебивает браузерное умолчание. */
+.storage-alert[hidden] { display: none; }
+
 /* ===== /ЗОНА storage ===== */

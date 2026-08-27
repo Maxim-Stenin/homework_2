@@ -180,7 +180,16 @@ function parseTransactions(text) {
 /* ---------- хранение ---------- */
 
 function save() {
-  try { localStorage.setItem(STORAGE_KEY, toCSV(transactions)); } catch (e) { /* приватный режим */ }
+  // Тихо гасить исключение нельзя: сюда попадает и запрет хранилища (приватный
+  // режим), и переполнение квоты. Раньше оба случая молча терялись — запись
+  // оставалась на экране, но не в localStorage (SPEC, п. 4, Сц-15).
+  try {
+    localStorage.setItem(STORAGE_KEY, toCSV(transactions));
+  } catch (e) {
+    storageSaveFailed(e);
+    return;
+  }
+  storageSaveOk();
 }
 
 function load() {
@@ -552,5 +561,65 @@ renderAll();
 
 /* ===== ЗОНА storage. Владелец — feature/storage.
    Показ и скрытие сообщения о том, что запись не сохранена. ===== */
+
+/* Причина отказа хранилища. Приватный режим и переполнение квоты должны быть
+   различимы — по SPEC они перестают быть одним и тем же случаем. */
+function storageFailureKind(e) {
+  // Если недоступно даже чтение — хранилище запрещено целиком, а не переполнено.
+  try {
+    localStorage.getItem(STORAGE_KEY);
+  } catch (readError) {
+    return 'blocked';
+  }
+  var name = e && e.name ? String(e.name) : '';
+  var code = e && typeof e.code === 'number' ? e.code : null;
+  // 22 — QuotaExceededError, 1014 — NS_ERROR_DOM_QUOTA_REACHED в Firefox.
+  if (name === 'QuotaExceededError' || name === 'NS_ERROR_DOM_QUOTA_REACHED'
+      || code === 22 || code === 1014) return 'quota';
+  if (name === 'SecurityError' || name === 'InvalidAccessError') return 'blocked';
+  return 'unknown';
+}
+
+function storageAlertText(e) {
+  var tail = ' Запись осталась на экране, но пропадёт при перезагрузке.'
+    + ' Выгрузите данные кнопкой «Сохранить CSV».';
+  var kind = storageFailureKind(e);
+  if (kind === 'quota') {
+    return 'Данные не сохранены: в хранилище браузера кончилось место.' + tail
+      + ' Затем удалите ненужные записи, чтобы освободить место.';
+  }
+  if (kind === 'blocked') {
+    return 'Данные не сохранены: браузер запретил хранилище'
+      + ' (приватный режим или настройки сайта).' + tail;
+  }
+  return 'Данные не сохранены: браузер отказал в записи'
+    + (e && e.name ? ' (' + e.name + ')' : '') + '.' + tail;
+}
+
+/* Сообщение живёт до первого успешного сохранения: save() зовётся и при
+   удалении, и при загрузке CSV, поэтому висеть после снятой проблемы оно
+   не должно. */
+function storageSaveFailed(e) {
+  var box = document.getElementById('storageAlert');
+  if (box) {
+    var wasHidden = box.hidden;
+    box.textContent = storageAlertText(e);
+    box.hidden = false;
+    // Сообщение стоит вверху страницы, а список записей длинный: если экран
+    // прокручен, отказ иначе останется за кадром. Подкручиваем только в момент
+    // появления, чтобы не дёргать страницу на каждом повторном отказе.
+    if (wasHidden && box.scrollIntoView) box.scrollIntoView({ block: 'nearest' });
+  }
+  // Исключение не проглатывается: в консоли остаётся сам объект ошибки.
+  if (window.console && console.error) console.error('Хранилище: запись не удалась.', e);
+}
+
+function storageSaveOk() {
+  var box = document.getElementById('storageAlert');
+  if (box && !box.hidden) {
+    box.textContent = '';
+    box.hidden = true;
+  }
+}
 
 /* ===== /ЗОНА storage ===== */
