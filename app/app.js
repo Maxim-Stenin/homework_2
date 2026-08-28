@@ -223,10 +223,18 @@ function showError(message) {
    по SPEC они РАСХОДЯТСЯ: при устаревшем результате фильтрации посторонняя
    запись видна в таблице, но в итоги и диаграмму не входит.
 
-   Сейчас все три отдают полный список — поведение то же, что было.
-   Владелец функции — feature/filters. Другие ветки её не трогают. */
+   Владелец функции — feature/filters. Другие ветки её не трогают.
+
+   'stats' — ВСЕГДА строгий результат фильтра, даже когда таблица заморожена.
+   'table' — замороженный снимок, пока плашка «устарел» имеет силу.
+   'export' — то же, что таблица: «в файле ровно то, что на экране» (SPEC, Сц-9). */
 function listFor(purpose) {
-  return transactions;
+  // Функция вызывается на старте, до кода зоны filters: переменные объявлены,
+  // но ещё не инициализированы — тогда фильтра нет и список полный.
+  if (!filterState) return transactions;
+  if (purpose === 'stats') return filterApply(transactions);
+  if (filterFrozenList) return filterFrozenList;
+  return filterApply(transactions);
 }
 
 /* ---------- отрисовка ---------- */
@@ -353,6 +361,7 @@ function renderTable() {
      Развести их — задача feature/filters; больше сюда никто не пишет. */
   if (rows.length === 0) {
     empty.hidden = false;
+    filterFillEmptyState(empty);
     return;
   }
   empty.hidden = true;
@@ -463,9 +472,11 @@ document.getElementById('tabExpense').addEventListener('click', function () { se
 document.getElementById('tabIncome').addEventListener('click', function () { setChartMode('income'); });
 
 function setChartMode(mode) {
-  chartMode = mode;
-  document.getElementById('tabExpense').setAttribute('aria-pressed', String(mode === 'expense'));
-  document.getElementById('tabIncome').setAttribute('aria-pressed', String(mode === 'income'));
+  // ЗОНА filters: фильтр по типу навязывает режим и гасит вторую вкладку (SPEC, Сц-2).
+  chartMode = filterForceChartMode(mode);
+  document.getElementById('tabExpense').setAttribute('aria-pressed', String(chartMode === 'expense'));
+  document.getElementById('tabIncome').setAttribute('aria-pressed', String(chartMode === 'income'));
+  filterUpdateChartTabs();
   renderChart();
 }
 
@@ -514,6 +525,7 @@ document.getElementById('fileInput').addEventListener('change', function (e) {
     }
 
     transactions = parsed.list;
+    filterReset();          // ЗОНА filters: загрузка CSV сбрасывает фильтр (SPEC, Сц-10)
     showError('');
     save();
     renderAll();
@@ -544,6 +556,266 @@ renderAll();
 
 /* ===== ЗОНА filters. Владелец — feature/filters.
    Состояние фильтра, чтение панели, счётчик, плашка «устарел». ===== */
+
+/* Фильтров ровно три: тип, категория, период «с»/«по» (решение человека, SPEC п.1).
+   Фильтр живёт только в памяти: перезагрузка страницы возвращает полный список
+   (SPEC, Сц-11) — поэтому ни localStorage, ни URL здесь не участвуют. */
+var filterState = { type: 'all', category: '', from: '', to: '' };
+
+/* Замороженный список таблицы. Не null — значит показанный список расходится
+   со строгим результатом фильтра (SPEC, «устаревание результата»).
+   Итоги и диаграмма его не видят: listFor('stats') всегда считает строго. */
+var filterFrozenList = null;
+var filterStaleShown = false;                    // видна ли сама плашка
+var filterPrevTransactions = transactions.slice();  // снимок для поиска добавленных/удалённых
+
+function filterEl(id) { return document.getElementById(id); }
+
+/* Канон категорий — тот же, что во всём приложении: регистр и пробелы не различаются. */
+function filterMatches(t) {
+  if (filterState.type !== 'all' && t.type !== filterState.type) return false;
+  if (filterState.category && categoryKey(t.category) !== filterState.category) return false;
+  // Даты в ISO: строковое сравнение = хронологическое. Границы включаются,
+  // пустая граница = открытый интервал с этой стороны.
+  if (filterState.from && t.date < filterState.from) return false;
+  if (filterState.to && t.date > filterState.to) return false;
+  return true;
+}
+
+function filterApply(list) {
+  if (filterCount() === 0) return list;
+  return list.filter(filterMatches);
+}
+
+/* Счётчик на кнопке: тип ≠ «все», выбранная категория и каждая заполненная граница. */
+function filterCount() {
+  var n = 0;
+  if (filterState.type !== 'all') n++;
+  if (filterState.category) n++;
+  if (filterState.from) n++;
+  if (filterState.to) n++;
+  return n;
+}
+
+function filterDropStale() {
+  filterFrozenList = null;
+  filterStaleShown = false;
+}
+
+/* ---------- диаграмма под фильтром по типу ---------- */
+
+function filterForceChartMode(mode) {
+  if (filterState && filterState.type !== 'all') return filterState.type;
+  return mode;
+}
+
+/* Вторая вкладка не исчезает, а гаснет: исчезающий элемент дезориентирует сильнее. */
+function filterUpdateChartTabs() {
+  if (!filterState) return;
+  filterEl('tabExpense').disabled = filterState.type === 'income';
+  filterEl('tabIncome').disabled = filterState.type === 'expense';
+}
+
+/* ---------- пустое состояние таблицы ---------- */
+
+/* «Записей пока нет» и «под фильтр ничего не подошло» — разные состояния (SPEC, Сц-4). */
+function filterFillEmptyState(el) {
+  el.textContent = '';
+  if (!filterState || filterCount() === 0 || transactions.length === 0) {
+    el.textContent = 'Записей пока нет.';
+    return;
+  }
+  var text = document.createElement('span');
+  text.textContent = 'Под выбранный фильтр не подошла ни одна запись.';
+  var back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'secondary filters-back';
+  back.textContent = 'Показать все записи';
+  back.addEventListener('click', function () { filterReset(); renderAll(); });
+  el.append(text, document.createElement('br'), back);
+}
+
+/* ---------- учёт добавленных и удалённых записей ---------- */
+
+/* Вызывается перед каждой отрисовкой. Сравнивает список со снимком: так добавление
+   и удаление ловятся, не трогая чужой код формы и кнопки удаления. */
+function filterSyncChanges() {
+  var current = transactions;
+  var prev = filterPrevTransactions;
+  var added = current.filter(function (t) { return prev.indexOf(t) === -1; });
+  var removed = prev.filter(function (t) { return current.indexOf(t) === -1; });
+  filterPrevTransactions = current.slice();
+
+  if (filterCount() === 0) { filterDropStale(); return; }
+  if (!added.length && !removed.length) return;
+
+  // Что сейчас показано в таблице, за вычетом удалённых записей.
+  var shown = (filterFrozenList || filterApply(prev)).filter(function (t) {
+    return current.indexOf(t) !== -1;
+  });
+
+  var stray = added.filter(function (t) { return !filterMatches(t); });
+
+  if (filterFrozenList) {
+    // Список уже заморожен — новые записи встают сверху, подходят они или нет.
+    filterFrozenList = added.concat(shown);
+  } else if (stray.length) {
+    // Запись не подходит под фильтр, но обязана быть видна — самой верхней строкой.
+    filterFrozenList = added.concat(shown);
+  }
+
+  // Плашка: посторонняя запись (Сц-5) или удаление при активном фильтре (Сц-8).
+  if (stray.length || removed.length) filterStaleShown = true;
+}
+
+/* ---------- панель ---------- */
+
+function filterRenderCategories() {
+  var select = filterEl('filterCategory');
+  var seen = {};
+  var chosen = filterState.category;
+  select.innerHTML = '';
+  var all = document.createElement('option');
+  all.value = '';
+  all.textContent = 'Все категории';
+  select.appendChild(all);
+  transactions.forEach(function (t) {
+    var key = categoryKey(t.category);
+    if (seen[key]) return;
+    seen[key] = true;
+    var option = document.createElement('option');
+    option.value = key;
+    option.textContent = t.category;
+    select.appendChild(option);
+  });
+  // Выбранной категории может уже не быть ни в одной записи — вариант сохраняется,
+  // иначе фильтр молча слетел бы, а список молча вырос.
+  if (chosen && !seen[chosen]) {
+    var kept = document.createElement('option');
+    kept.value = chosen;
+    kept.textContent = chosen;
+    select.appendChild(kept);
+  }
+  select.value = chosen;
+}
+
+function filterRenderPanel() {
+  var count = filterCount();
+  var badge = filterEl('filtersCount');
+  badge.textContent = String(count);
+  badge.hidden = count === 0;
+  filterEl('filtersToggle').setAttribute('aria-label',
+    count === 0 ? 'Фильтры' : 'Фильтры, активных: ' + count);
+
+  filterEl('filterType').value = filterState.type;
+  filterEl('filterFrom').value = filterState.from;
+  filterEl('filterTo').value = filterState.to;
+  filterRenderCategories();
+
+  filterEl('filtersStale').hidden = !filterStaleShown;
+  filterUpdateChartTabs();
+}
+
+function filterShowError(message) {
+  filterEl('filtersError').textContent = message || '';
+}
+
+/* Читает панель и применяет. Период задом наперёд — ошибка, список не меняется. */
+function filterApplyFromPanel() {
+  var from = filterEl('filterFrom').value;
+  var to = filterEl('filterTo').value;
+  if (from && to && from > to) {
+    filterShowError('Дата «с» позже даты «по» — период пуст. Список не изменён.');
+    return;
+  }
+  filterShowError('');
+  filterState = {
+    type: filterEl('filterType').value,
+    category: filterEl('filterCategory').value,
+    from: from,
+    to: to
+  };
+  filterDropStale();
+  setChartMode(chartMode);   // вернёт или навяжет режим и погасит вкладку
+  renderAll();
+}
+
+function filterReset() {
+  filterState = { type: 'all', category: '', from: '', to: '' };
+  filterDropStale();
+  filterShowError('');
+  setChartMode(chartMode);
+}
+
+/* ---------- события панели ---------- */
+
+filterEl('filtersToggle').addEventListener('click', function () {
+  var panel = filterEl('filtersPanel');
+  var open = panel.hidden;
+  panel.hidden = !open;
+  this.setAttribute('aria-expanded', String(open));
+});
+
+['filterType', 'filterCategory', 'filterFrom', 'filterTo'].forEach(function (id) {
+  filterEl(id).addEventListener('change', filterApplyFromPanel);
+});
+
+filterEl('filtersReset').addEventListener('click', function () {
+  filterReset();
+  renderAll();
+});
+
+// «Обновить» — пересобрать список по фильтру; посторонняя запись уходит.
+filterEl('filtersRefresh').addEventListener('click', function () {
+  filterDropStale();
+  renderAll();
+});
+
+// Крестик закрывает только плашку: список остаётся прежним (решение человека).
+filterEl('filtersClose').addEventListener('click', function () {
+  filterStaleShown = false;
+  filterRenderPanel();
+});
+
+/* ---------- посторонняя запись — самой верхней строкой ---------- */
+
+/* renderTable() сортирует строки по дате (новые сверху), и это не зона фильтра.
+   Но по SPEC посторонняя запись обязана стоять ПЕРВОЙ строкой независимо от даты
+   (Сц-5): добавили расход задним числом при фильтре «доходы» — он всё равно сверху.
+   Поэтому фильтр не трогает сортировку, а после отрисовки переставляет свои строки
+   в своей же зоне. Порядок строк восстанавливается по тому же сравнению, что
+   и в renderTable(), — единственная связь с чужим кодом, и она только на чтение. */
+function filterLiftStrayRows() {
+  if (!filterFrozenList) return;
+  var stray = filterFrozenList.filter(function (t) { return !filterMatches(t); });
+  if (!stray.length) return;
+
+  var tbody = document.getElementById('tbody');
+  var trs = [].slice.call(tbody.children);
+  var sorted = filterFrozenList.slice().sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+  if (trs.length !== sorted.length) return;   // разметку сменили — молча не ломаем
+
+  // Идём с конца, вставляя каждую строку в начало: взаимный порядок сохраняется.
+  for (var i = stray.length - 1; i >= 0; i--) {
+    var pos = sorted.indexOf(stray[i]);
+    if (pos !== -1) tbody.insertBefore(trs[pos], tbody.firstChild);
+  }
+}
+
+/* ---------- включение в общий цикл отрисовки ---------- */
+
+/* renderAll лежит выше черты и чужой правке не подлежит, поэтому фильтр
+   оборачивает её здесь, в своей зоне: сначала учесть добавленное и удалённое,
+   потом отрисовать, потом обновить панель. */
+var filterBaseRenderAll = renderAll;
+renderAll = function () {
+  filterSyncChanges();
+  filterBaseRenderAll();
+  filterLiftStrayRows();
+  filterRenderPanel();
+};
+
+renderAll();
 
 /* ===== /ЗОНА filters ===== */
 

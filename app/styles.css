@@ -430,6 +430,88 @@ td.amount.expense { color: var(--expense); }
    плашки «Результат фильтрации устарел» и состояния «пустой результат».
    Владелец — feature/filters. ===== */
 
+.filters { display: block; margin-bottom: 16px; min-width: 0; }
+
+.filters-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.filters-toggle { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Счётчик активных фильтров: тип ≠ «все», категория, каждая граница периода. */
+.filters-count {
+  display: inline-block;
+  min-width: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+
+/* Плашка «Результат фильтрации устарел» — рядом с кнопкой «Фильтры». */
+.filters-stale {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 6px 12px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--card);
+  font-size: 13px;
+  flex-wrap: wrap;
+}
+.filters-stale-text { color: var(--text); }
+.filters-stale .filters-refresh {
+  padding: 4px 10px;
+  font-size: 13px;
+}
+.filters-stale .filters-close {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: 6px;
+}
+.filters-stale .filters-close:hover { color: var(--text); }
+
+.filters-panel {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  align-items: end;
+  margin-top: 12px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+}
+.filters-panel[hidden] { display: none; }
+.filters-actions { grid-column: 1 / -1; display: flex; gap: 8px; }
+.filters-error {
+  grid-column: 1 / -1;
+  margin: 0;
+  min-height: 19px;
+  color: var(--expense);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
+/* Кнопка возврата к полному списку в пустом состоянии таблицы (Сц-4). */
+.filters-back { margin-top: 12px; }
+
+/* Погашенная вкладка диаграммы остаётся видимой (решение человека). */
+.tabs button:disabled { opacity: .5; cursor: not-allowed; }
+.tabs button:disabled:hover { filter: none; }
+
+@media (max-width: 760px) {
+  .filters-panel { grid-template-columns: 1fr 1fr; }
+}
+
 /* ===== /ЗОНА filters ===== */
 
 /* ===== ЗОНА theme — переопределения токенов под светлую и тёмную тему
