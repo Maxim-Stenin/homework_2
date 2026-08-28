@@ -147,6 +147,135 @@ td.amount.expense { color: var(--expense); }
    Токены :root ВЫШЕ черты принадлежат feature/design: тема их переопределяет
    здесь, а не правит там. ===== */
 
+/* --- Тёмная палитра «глубокий тёмно-синий», значения из DESIGN.md ---------
+   Значения перечислены ДВАЖДЫ намеренно: одно и то же нужно применить
+   и по явному выбору ([data-theme="dark"]), и по системной теме в режиме «авто»
+   (@media prefers-color-scheme). Объединить два таких правила в одно CSS
+   не позволяет. Списки обязаны совпадать — правим оба или ни одного.
+
+   Имена токенов даны в двух наборах: --card/--text — то, что :root отдаёт
+   сегодня, --surface/--ink — то, как они называются в DESIGN.md и появятся
+   после слияния feature/design. Тема переопределяет ЗНАЧЕНИЯ, новых токенов
+   в :root не заводит. */
+
+[data-theme="dark"] {
+  --bg: #0B1A2E;        /* Полночь */
+  --card: #142943;      /* Кобальт ночной */
+  --surface: #142943;
+  --text: #E6EDF6;      /* Иней обратный */
+  --ink: #E6EDF6;
+  --muted: #93A9C4;     /* Дымка ночная */
+  --accent: #79ADEA;    /* Кобальт светлый */
+  --line: #22405F;      /* Линовка ночная */
+  --income: #3FC095;    /* Хвоя */
+  --expense: #E97B5C;   /* Кирпич */
+}
+
+@media (prefers-color-scheme: dark) {
+  /* «Авто» — это отсутствие data-theme. Явно выбранная светлая тема системную
+     перебивает, поэтому :not([data-theme="light"]). */
+  :root:not([data-theme="light"]) {
+    --bg: #0B1A2E;
+    --card: #142943;
+    --surface: #142943;
+    --text: #E6EDF6;
+    --ink: #E6EDF6;
+    --muted: #93A9C4;
+    --accent: #79ADEA;
+    --line: #22405F;
+    --income: #3FC095;
+    --expense: #E97B5C;
+  }
+}
+
+/* --- места, где цвет выше черты записан литералом, а не токеном -----------
+   Переопределяем их у себя, а не правим чужую зону. После слияния
+   feature/design часть этих правил может стать лишней — тогда их убирает
+   отдельная сверка, а не «заодно». */
+
+[data-theme="dark"] input,
+[data-theme="dark"] select,
+[data-theme="dark"] button.secondary,
+[data-theme="dark"] .tabs button {
+  background: var(--surface);
+  color: var(--text);
+}
+/* Белый текст на светло-голубом акценте даёт 2,34:1 — измерено, не годится.
+   На тёмном фоне подписи кнопок берут цвет фона страницы: 7,47:1. */
+[data-theme="dark"] button { color: var(--bg); }
+[data-theme="dark"] button.secondary,
+[data-theme="dark"] .tabs button { color: var(--text); }
+/* Фон возвращается явно: правило выше гасит акцент у ВСЕХ .tabs button, включая
+   выбранную вкладку. Замер поймал результат — тёмный текст на тёмной панели,
+   1,19:1, вкладка практически не читалась. С акцентом обратно — 7,47:1. */
+[data-theme="dark"] .tabs button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg);
+}
+[data-theme="dark"] .del { color: var(--muted); background: none; }
+[data-theme="dark"] .del:hover { color: var(--expense); background: rgba(233, 123, 92, 0.16); }
+/* Подпись в центре кольца ставится скриптом атрибутом fill="#1c1e21" (app.js,
+   выше черты — не мой блок). Презентационный атрибут слабее правила CSS,
+   поэтому цвет чинится отсюда. */
+[data-theme="dark"] #donut text { fill: var(--ink); }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) input,
+  :root:not([data-theme="light"]) select,
+  :root:not([data-theme="light"]) button.secondary,
+  :root:not([data-theme="light"]) .tabs button {
+    background: var(--surface);
+    color: var(--text);
+  }
+  :root:not([data-theme="light"]) button { color: var(--bg); }
+  :root:not([data-theme="light"]) button.secondary,
+  :root:not([data-theme="light"]) .tabs button { color: var(--text); }
+  :root:not([data-theme="light"]) .tabs button[aria-pressed="true"] {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: var(--bg);
+  }
+  :root:not([data-theme="light"]) .del { color: var(--muted); background: none; }
+  :root:not([data-theme="light"]) .del:hover { color: var(--expense); background: rgba(233, 123, 92, 0.16); }
+  :root:not([data-theme="light"]) #donut text { fill: var(--ink); }
+}
+
+/* --- сам переключатель ---------------------------------------------------
+   Раскладку страницы держит feature/design, поэтому здесь только то,
+   без чего переключатель не работает как переключатель. */
+
+.theme-switch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 16px;
+}
+.theme-switch__label {
+  font-size: 13px;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.theme-switch button {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
+  font-weight: 400;
+  padding: 6px 14px;
+}
+.theme-switch button[aria-pressed="true"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+  font-weight: 500;
+}
+[data-theme="dark"] .theme-switch button { background: var(--surface); color: var(--text); }
+[data-theme="dark"] .theme-switch button[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-switch button { background: var(--surface); color: var(--text); }
+  :root:not([data-theme="light"]) .theme-switch button[aria-pressed="true"] { background: var(--accent); color: var(--bg); }
+}
 /* ===== /ЗОНА theme ===== */
 
 /* ===== ЗОНА storage — стили сообщения о несохранённой записи.
