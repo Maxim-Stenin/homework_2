@@ -443,7 +443,7 @@ td.amount.expense { color: var(--expense); }
   padding: 0 6px;
   border-radius: 10px;
   background: var(--accent);
-  color: #fff;
+  color: var(--on-accent);
   font-size: 12px;
   font-weight: 600;
   line-height: 18px;
@@ -538,6 +538,11 @@ td.amount.expense { color: var(--expense); }
   --ink: #E6EDF6;
   --muted: #93A9C4;     /* Дымка ночная */
   --accent: #79ADEA;    /* Кобальт светлый */
+  /* Подпись на акценте. В тёмной теме акцент светлый, поэтому белый текст
+     на нём даёт 2.34:1 — берётся цвет фона страницы. Токен пропустили обе
+     ветки: feature/theme не заводит токенов выше своей зоны, а feature/filters
+     про тёмную тему не знала и зашила #fff. Дописано при слиянии. */
+  --on-accent: #0B1A2E;
   --line: #22405F;      /* Линовка ночная */
   --income: #3FC095;    /* Хвоя */
   --expense: #E97B5C;   /* Кирпич */
@@ -554,6 +559,7 @@ td.amount.expense { color: var(--expense); }
     --ink: #E6EDF6;
     --muted: #93A9C4;
     --accent: #79ADEA;
+    --on-accent: #0B1A2E;
     --line: #22405F;
     --income: #3FC095;
     --expense: #E97B5C;
