@@ -823,6 +823,75 @@ renderAll();
    Три состояния переключателя, отдельный ключ localStorage (НЕ finance.csv),
    подписка на смену системной темы. ===== */
 
+/* Контроллер темы. Три состояния: 'auto' | 'light' | 'dark'.
+
+   Хранится ОТДЕЛЬНЫМ ключом 'finance.theme'. Ключ 'finance.csv' и формат CSV
+   не трогаются: порча настройки не должна задевать деньги (SPEC, решение человека).
+
+   Разделение труда с CSS: «авто» — это отсутствие атрибута data-theme,
+   и тогда тему выбирает @media (prefers-color-scheme) сам, без JS. Поэтому
+   Сц-13 работает даже если этот скрипт не выполнится. */
+(function () {
+  var THEME_KEY = 'finance.theme';
+  var MODES = ['auto', 'light', 'dark'];
+  var root = document.documentElement;
+  var box = document.getElementById('themeSwitch');
+
+  function readMode() {
+    var value = null;
+    try { value = localStorage.getItem(THEME_KEY); } catch (e) { value = null; }
+    // Всё, что не из списка (мусор, null, чужая запись), читается как «авто».
+    return MODES.indexOf(value) === -1 ? 'auto' : value;
+  }
+
+  function writeMode(mode) {
+    try { localStorage.setItem(THEME_KEY, mode); } catch (e) { /* приватный режим */ }
+  }
+
+  function systemDark() {
+    return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  }
+
+  /* Применяет режим к документу и приводит кнопки в соответствие.
+     data-theme-mode — выбранный режим (виден в разметке, по нему удобно проверять),
+     data-theme — фактическая тема, и она ставится ТОЛЬКО при явном выборе. */
+  function apply(mode) {
+    if (mode === 'auto') root.removeAttribute('data-theme');
+    else root.setAttribute('data-theme', mode);
+    root.setAttribute('data-theme-mode', mode);
+    root.setAttribute('data-theme-effective', mode === 'auto' ? (systemDark() ? 'dark' : 'light') : mode);
+    if (!box) return;
+    var buttons = box.querySelectorAll('[data-theme-value]');
+    for (var i = 0; i < buttons.length; i++) {
+      buttons[i].setAttribute('aria-pressed', String(buttons[i].getAttribute('data-theme-value') === mode));
+    }
+  }
+
+  var current = readMode();
+  apply(current);
+
+  if (box) {
+    box.addEventListener('click', function (e) {
+      var button = e.target.closest ? e.target.closest('[data-theme-value]') : null;
+      if (!button || !box.contains(button)) return;
+      var mode = button.getAttribute('data-theme-value');
+      if (MODES.indexOf(mode) === -1) return;
+      current = mode;
+      writeMode(mode);
+      apply(mode);
+    });
+  }
+
+  /* Смена системной темы. Саму окраску в режиме «авто» делает CSS, здесь только
+     обновляется data-theme-effective — чтобы состояние страницы было видно
+     снаружи и в тот момент, когда пользователь ничего не нажимал. */
+  var mql = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  if (mql) {
+    var onSystemChange = function () { if (current === 'auto') apply('auto'); };
+    if (mql.addEventListener) mql.addEventListener('change', onSystemChange);
+    else if (mql.addListener) mql.addListener(onSystemChange);
+  }
+})();
 /* ===== /ЗОНА theme ===== */
 
 /* ===== ЗОНА storage. Владелец — feature/storage.

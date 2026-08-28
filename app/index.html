@@ -28,6 +28,27 @@
 
   <!-- ЗОНА theme. Владелец разметки — feature/theme: переключатель темы,
        три состояния (авто / светлая / тёмная). Другие ветки сюда не пишут. -->
+  <div class="theme-switch" id="themeSwitch" role="group" aria-label="Тема оформления">
+    <span class="theme-switch__label">Тема</span>
+    <button type="button" id="themeAuto" data-theme-value="auto" aria-pressed="true">Авто</button>
+    <button type="button" id="themeLight" data-theme-value="light" aria-pressed="false">Светлая</button>
+    <button type="button" id="themeDark" data-theme-value="dark" aria-pressed="false">Тёмная</button>
+  </div>
+  <script>
+  /* Раннее применение выбранной темы: без него страница успевает нарисоваться
+     светлой, а app.js подключён в конце body — получилась бы вспышка старой темы.
+     Скрипт делает ровно одно: ставит data-theme на <html> до отрисовки остального.
+     Режим «авто» атрибута не ставит вообще — тогда работает @media
+     (prefers-color-scheme), и системная тема доходит до страницы без участия JS. */
+  (function () {
+    try {
+      var mode = localStorage.getItem('finance.theme');
+      if (mode === 'dark' || mode === 'light') {
+        document.documentElement.setAttribute('data-theme', mode);
+      }
+    } catch (e) { /* хранилище недоступно — остаётся «авто» */ }
+  })();
+  </script>
   <!-- /ЗОНА theme -->
   </header>
 
