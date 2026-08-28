@@ -90,7 +90,53 @@
        «Результат фильтрации устарел». Контейнер может двигать и обёртывать
        feature/design (раскладка), но id="filters" сохраняется, а внутрь
        дизайн не пишет. -->
-  <aside class="filters" id="filters"></aside>
+  <aside class="filters" id="filters">
+    <div class="filters-bar">
+      <button type="button" class="secondary filters-toggle" id="filtersToggle"
+              aria-expanded="false" aria-controls="filtersPanel">
+        Фильтры<span class="filters-count" id="filtersCount" hidden>0</span>
+      </button>
+
+      <!-- Плашка «устарел»: список на экране не совпадает со строгим результатом
+           фильтра. Итоги и диаграмма в этот момент считаются по строгому результату
+           (SPEC, Сц-5). Крестик закрывает только плашку, список не пересобирает. -->
+      <div class="filters-stale" id="filtersStale" role="status" hidden>
+        <span class="filters-stale-text">Результат фильтрации устарел</span>
+        <button type="button" class="filters-refresh" id="filtersRefresh">Обновить</button>
+        <button type="button" class="filters-close" id="filtersClose"
+                title="Закрыть" aria-label="Закрыть плашку">×</button>
+      </div>
+    </div>
+
+    <div class="filters-panel" id="filtersPanel" hidden>
+      <div class="field">
+        <label for="filterType">Тип</label>
+        <select id="filterType">
+          <option value="all">Все</option>
+          <option value="income">Доходы</option>
+          <option value="expense">Расходы</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filterCategory">Категория</label>
+        <select id="filterCategory">
+          <option value="">Все категории</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="filterFrom">Период с</label>
+        <input type="date" id="filterFrom">
+      </div>
+      <div class="field">
+        <label for="filterTo">Период по</label>
+        <input type="date" id="filterTo">
+      </div>
+      <div class="filters-actions">
+        <button type="button" class="secondary" id="filtersReset">Сбросить фильтры</button>
+      </div>
+      <p class="filters-error" id="filtersError" role="alert"></p>
+    </div>
+  </aside>
   <!-- /ЗОНА filters -->
 
   <!-- Диаграмма -->
