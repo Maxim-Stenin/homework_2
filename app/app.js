@@ -182,27 +182,46 @@ function parseTransactions(text) {
 
 /* ---------- хранение ---------- */
 
-function save() {
+/* op — что именно сохранялось: 'add' | 'delete' | 'import'. Нужен ТОЛЬКО для
+   текста сообщения об отказе: последствия у отказа разные, и одинаковым текстом
+   их описывать нельзя (дефект 7 прогона 1 — при удалении показывалось «запись
+   осталась на экране, но пропадёт при перезагрузке», ровно наоборот факту:
+   запись с экрана ушла, а после перезагрузки вернётся). */
+function save(op) {
   // Тихо гасить исключение нельзя: сюда попадает и запрет хранилища (приватный
   // режим), и переполнение квоты. Раньше оба случая молча терялись — запись
   // оставалась на экране, но не в localStorage (SPEC, п. 4, Сц-15).
   try {
     localStorage.setItem(STORAGE_KEY, toCSV(transactions));
   } catch (e) {
-    storageSaveFailed(e);
+    storageSaveFailed(e, op);
     return;
   }
   storageSaveOk();
 }
 
+/* Отказ ЧТЕНИЯ виден так же, как отказ записи. Раньше catch был пустым, а разбор
+   с ошибкой молча оставлял пустой список: состояние «данные есть, но недоступны»
+   было неотличимо от «записей никогда не было» (дефект 6 прогона 1).
+   SPEC, п. 4: тихо гасить исключение нельзя ни в одном из случаев. */
 function load() {
   var text;
-  try { text = localStorage.getItem(STORAGE_KEY); } catch (e) { return; }
+  try {
+    text = localStorage.getItem(STORAGE_KEY);
+  } catch (e) {
+    storageLoadFailed('blocked', e);
+    return;
+  }
   if (!text) return;
   var parsed = parseTransactions(text);
-  // Испорченное хранилище не перезаписывается: список остаётся пустым, но данные
-  // в localStorage целы, и их ещё можно достать руками.
-  if (parsed.ok) transactions = parsed.list;
+  // Испорченное хранилище не перезаписывается сразу: список остаётся пустым,
+  // данные в localStorage целы, и их ещё можно достать руками — но об этом
+  // надо сказать, потому что первое же сохранение их затрёт.
+  if (parsed.ok) {
+    transactions = parsed.list;
+    return;
+  }
+  storageLoadFailed('corrupt', parsed.error);
 }
 
 /* ---------- формат ---------- */
@@ -285,6 +304,12 @@ function renderChart() {
   legend.innerHTML = '';
 
   if (total <= 0) {
+    /* ЗОНА filters — пустое состояние диаграммы. По SPEC «пустой результат
+       фильтрации» — отдельное состояние, и оно распространяется на весь экран,
+       а не только на таблицу (дефект 4 прогона 1: таблица говорила про фильтр,
+       диаграмма в это же время предлагала «добавьте запись» при шести записях).
+       Текст собирает владелец фильтра, здесь только точка вызова. */
+    empty.textContent = filterChartEmptyText(chartMode);
     empty.hidden = false;
     svg.style.display = 'none';
     return;
@@ -411,7 +436,7 @@ function renderTable() {
       if (!window.confirm(question)) return;
       var index = transactions.indexOf(t);
       if (index !== -1) transactions.splice(index, 1);
-      save();
+      save('delete');
       renderAll();
     });
     tdDel.appendChild(del);
@@ -468,7 +493,7 @@ document.getElementById('addForm').addEventListener('submit', function (e) {
     amount: amount.value,
     comment: document.getElementById('fComment').value.trim()
   });
-  save();
+  save('add');
   renderAll();
 
   document.getElementById('fAmount').value = '';
@@ -536,7 +561,7 @@ document.getElementById('fileInput').addEventListener('change', function (e) {
     transactions = parsed.list;
     filterReset();          // ЗОНА filters: загрузка CSV сбрасывает фильтр (SPEC, Сц-10)
     showError('');
-    save();
+    save('import');
     renderAll();
   };
   reader.readAsText(file, 'utf-8');
@@ -570,6 +595,12 @@ renderAll();
    Фильтр живёт только в памяти: перезагрузка страницы возвращает полный список
    (SPEC, Сц-11) — поэтому ни localStorage, ни URL здесь не участвуют. */
 var filterState = { type: 'all', category: '', from: '', to: '' };
+
+/* Подпись выбранной категории в том написании, в каком она встретилась в записях.
+   Живёт отдельно от filterState.category (там ключ сопоставления) и переживает
+   исчезновение категории из данных — иначе показывать в списке было бы нечего,
+   кроме ключа. */
+var filterCategoryLabel = '';
 
 /* Замороженный список таблицы. Не null — значит показанный список расходится
    со строгим результатом фильтра (SPEC, «устаревание результата»).
@@ -644,6 +675,24 @@ function filterFillEmptyState(el) {
   el.append(text, document.createElement('br'), back);
 }
 
+/* Пустая диаграмма: причина у неё та же, что у пустой таблицы, плюс своя —
+   записи есть, но ни одной нужного типа. Разводятся все три случая. */
+function filterChartEmptyText(mode) {
+  var income = mode === 'income';
+  if (!filterState || transactions.length === 0) {
+    return 'Пока нечего показывать — добавьте запись.';
+  }
+  if (filterCount() > 0) {
+    if (filterApply(transactions).length === 0) {
+      return 'Под выбранный фильтр не подошла ни одна запись.';
+    }
+    return income
+      ? 'Среди отобранных фильтром записей нет доходов.'
+      : 'Среди отобранных фильтром записей нет расходов.';
+  }
+  return income ? 'Доходов пока нет.' : 'Расходов пока нет.';
+}
+
 /* ---------- учёт добавленных и удалённых записей ---------- */
 
 /* Вызывается перед каждой отрисовкой. Сравнивает список со снимком: так добавление
@@ -694,15 +743,25 @@ function filterRenderCategories() {
     seen[key] = true;
     var option = document.createElement('option');
     option.value = key;
+    // value — ключ сопоставления (categoryKey), подпись — написание из записи.
+    // dataset.label хранит подпись отдельно от textContent: к textContent
+    // ниже приписывается пояснение, и брать её обратно как подпись нельзя.
+    option.dataset.label = t.category;
     option.textContent = t.category;
     select.appendChild(option);
   });
-  // Выбранной категории может уже не быть ни в одной записи — вариант сохраняется,
-  // иначе фильтр молча слетел бы, а список молча вырос.
+  /* Выбранной категории может уже не быть ни в одной записи (удалили последнюю
+     такую запись). Вариант сохраняется: молча снять фильтр значило бы, что список
+     сам собой вырос, а SPEC (Сц-8) требует, чтобы удаление фильтр не сбрасывало.
+     Дефект 5 прогона 1: в подписи стоял сырой ключ («аптека» строчными) — ключ
+     сопоставления пользователю не показывается ни при каких условиях. Подпись
+     берётся запомненная, и к ней добавляется объяснение, почему пункт остался
+     в списке и почему таблица под ним пуста. */
   if (chosen && !seen[chosen]) {
     var kept = document.createElement('option');
     kept.value = chosen;
-    kept.textContent = chosen;
+    kept.dataset.label = filterCategoryLabel || chosen;
+    kept.textContent = (filterCategoryLabel || chosen) + ' — нет записей';
     select.appendChild(kept);
   }
   select.value = chosen;
@@ -738,9 +797,12 @@ function filterApplyFromPanel() {
     return;
   }
   filterShowError('');
+  var categorySelect = filterEl('filterCategory');
+  var chosenOption = categorySelect.options[categorySelect.selectedIndex];
+  filterCategoryLabel = chosenOption ? (chosenOption.dataset.label || '') : '';
   filterState = {
     type: filterEl('filterType').value,
-    category: filterEl('filterCategory').value,
+    category: categorySelect.value,
     from: from,
     to: to
   };
@@ -751,6 +813,7 @@ function filterApplyFromPanel() {
 
 function filterReset() {
   filterState = { type: 'all', category: '', from: '', to: '' };
+  filterCategoryLabel = '';
   filterDropStale();
   filterShowError('');
   setChartMode(chartMode);
@@ -924,9 +987,26 @@ function storageFailureKind(e) {
   return 'unknown';
 }
 
-function storageAlertText(e) {
-  var tail = ' Запись осталась на экране, но пропадёт при перезагрузке.'
-    + ' Выгрузите данные кнопкой «Сохранить CSV».';
+/* Последствие отказа. Оно РАЗНОЕ для добавления и для удаления, поэтому текст
+   собирается по операции, а не берётся один на всех (дефект 7 прогона 1). */
+function storageOutcomeText(op) {
+  if (op === 'delete') {
+    return ' Запись убрана с экрана, но осталась в хранилище и вернётся'
+      + ' при перезагрузке.';
+  }
+  if (op === 'import') {
+    return ' Загруженные записи видны на экране, но пропадут при перезагрузке:'
+      + ' в хранилище остались прежние.';
+  }
+  if (op === 'add') {
+    return ' Запись осталась на экране, но пропадёт при перезагрузке.';
+  }
+  return ' Изменение видно на экране, но в хранилище не попало и пропадёт'
+    + ' при перезагрузке.';
+}
+
+function storageAlertText(e, op) {
+  var tail = storageOutcomeText(op) + ' Выгрузите данные кнопкой «Сохранить CSV».';
   var kind = storageFailureKind(e);
   if (kind === 'quota') {
     return 'Данные не сохранены: в хранилище браузера кончилось место.' + tail
@@ -943,11 +1023,11 @@ function storageAlertText(e) {
 /* Сообщение живёт до первого успешного сохранения: save() зовётся и при
    удалении, и при загрузке CSV, поэтому висеть после снятой проблемы оно
    не должно. */
-function storageSaveFailed(e) {
+function storageSaveFailed(e, op) {
   var box = document.getElementById('storageAlert');
   if (box) {
     var wasHidden = box.hidden;
-    box.textContent = storageAlertText(e);
+    box.textContent = storageAlertText(e, op);
     box.hidden = false;
     // Сообщение стоит вверху страницы, а список записей длинный: если экран
     // прокручен, отказ иначе останется за кадром. Подкручиваем только в момент
@@ -956,6 +1036,35 @@ function storageSaveFailed(e) {
   }
   // Исключение не проглатывается: в консоли остаётся сам объект ошибки.
   if (window.console && console.error) console.error('Хранилище: запись не удалась.', e);
+}
+
+/* Отказ ЧТЕНИЯ хранилища на старте. kind: 'blocked' — доступа нет вовсе;
+   'corrupt' — доступ есть, но содержимое не разобралось. Оба случая раньше
+   заканчивались пустым списком без единого слова на экране, из-за чего
+   «данные есть, но недоступны» выглядело как «записей никогда не было»
+   (дефект 6 прогона 1). detail — объект ошибки или строка разбора. */
+function storageLoadFailed(kind, detail) {
+  var text;
+  if (kind === 'corrupt') {
+    text = 'Данные из хранилища не удалось прочитать: ' + detail + '.'
+      + ' Это не значит, что записей нет: они остались в хранилище браузера'
+      + ' в прежнем виде, но показать их приложение не может.'
+      + ' Первая же новая запись их перезапишет — если данные нужны,'
+      + ' сначала достаньте их из хранилища вручную.';
+  } else {
+    text = 'Данные не прочитаны: браузер запретил хранилище'
+      + ' (приватный режим или настройки сайта).'
+      + ' Список пуст не потому, что записей нет, а потому, что до них'
+      + ' нет доступа. Всё, что вы добавите сейчас, пропадёт при перезагрузке.';
+  }
+  var box = document.getElementById('storageAlert');
+  if (box) {
+    box.textContent = text;
+    box.hidden = false;
+  }
+  if (window.console && console.error) {
+    console.error('Хранилище: чтение не удалось (' + kind + ').', detail);
+  }
 }
 
 function storageSaveOk() {

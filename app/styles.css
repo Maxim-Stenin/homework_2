@@ -39,6 +39,20 @@
 
 * { box-sizing: border-box; }
 
+/* Атрибут hidden скрывает — всегда и у всех.
+   Дефекты 1 и 3 прогона 1: `.filters-stale { display: flex }` и
+   `.filters-count { display: inline-block }` перебивали браузерное
+   `[hidden] { display: none }`, потому что селектор с классом сильнее
+   селектора по типу элемента в user-agent-таблице. Разметка элемент прятала,
+   стиль его показывал — плашка «Результат фильтрации устарел» и счётчик «0»
+   висели на чистой загрузке, а «Обновить» ловил фокус с клавиатуры.
+   Правило чинит весь класс дефектов сразу: любое новое `display` в любой зоне
+   больше не может воскресить скрытый элемент. !important нужен потому,
+   что зоны ниже задают display по классу — без него правило проигрывало бы
+   каждому такому случаю. Элемент, которому нужен свой display, просто
+   не помечается hidden. */
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   padding: 32px 16px 64px;
@@ -430,7 +444,20 @@ td.amount.expense { color: var(--expense); }
    плашки «Результат фильтрации устарел» и состояния «пустой результат».
    Владелец — feature/filters. ===== */
 
-.filters { display: block; margin-bottom: 16px; min-width: 0; }
+/* container-type: панель раскладывается по СВОЕЙ ширине, а не по ширине окна.
+   Дефект 2 прогона 1: колонки задавались через @media, то есть по окну, —
+   и на 1280 px, где панель уезжает в боковую колонку шириной 320 px, четыре
+   контрола вставали в ряд по 63 px: даты показывали обрезанное «дд», список
+   категорий не влезал, подпись «Период по» ломалась на две строки. По ширине
+   окна ширину панели угадать нельзя в принципе: одна и та же панель бывает
+   и во всю страницу (до 1000 px), и в узкой колонке (от 1000 px). */
+.filters {
+  display: block;
+  margin-bottom: 16px;
+  min-width: 0;
+  container-type: inline-size;
+  container-name: filters;
+}
 
 .filters-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 
@@ -479,9 +506,12 @@ td.amount.expense { color: var(--expense); }
 }
 .filters-stale .filters-close:hover { color: var(--text); }
 
+/* Один столбец — база и запасной вариант: он читаем на любой ширине,
+   в том числе там, где контейнерные запросы не поддерживаются. Столбцы
+   добавляются только когда панели хватает места на них. */
 .filters-panel {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: 1fr;
   gap: 12px;
   align-items: end;
   margin-top: 12px;
@@ -508,8 +538,13 @@ td.amount.expense { color: var(--expense); }
 .tabs button:disabled { opacity: .5; cursor: not-allowed; }
 .tabs button:disabled:hover { filter: none; }
 
-@media (max-width: 760px) {
-  .filters-panel { grid-template-columns: 1fr 1fr; }
+/* Пороги взяты от содержимого, а не от круглых чисел: поле даты в Chrome
+   просит ~150 px, чтобы показать «01.08.2026» целиком, плюс отступы сетки. */
+@container filters (min-width: 340px) {
+  .filters-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@container filters (min-width: 680px) {
+  .filters-panel { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 /* ===== /ЗОНА filters ===== */
